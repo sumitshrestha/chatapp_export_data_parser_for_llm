@@ -17,6 +17,8 @@ public class WhatsAppChatParser {
     private static final int CRITERIA_CONVERSATION_MERGE = 20;
     private final int MAX_BUCKET_SIZE;
     private final int MIN_BUCKET_SIZE;
+
+    private final int MAX_TRAIN_DATA_SIZE;
     private final int TRAIN_DATA_COUNT;
     private final int TEST_DATA_COUNT;
     private static final Pattern iphoneMessagePattern = Pattern.compile("\\[(?<month>\\d{1,2})/(?<day>\\d{1,2})/(?<year>\\d{1,2}), (?<hour>\\d{1,2}):(?<minute>\\d{1,2}):(?<second>\\d{1,2}) (?<daynight>[AP]M)\\] (?<personName>[\\w ]+): (?<message>.*)");
@@ -36,12 +38,13 @@ public class WhatsAppChatParser {
             "You deleted this message.".toLowerCase()
     };
 
-    public WhatsAppChatParser(String targetUser, int TRAIN_DATA_COUNT, int TEST_DATA_COUNT, int MIN_BUCKET_SIZE, int MAX_BUCKET_SIZE) {
+    public WhatsAppChatParser(String targetUser, int TRAIN_DATA_COUNT, int TEST_DATA_COUNT, int MIN_BUCKET_SIZE, int MAX_BUCKET_SIZE, int max_train_data_size) {
         this.targetUser = targetUser;
         this.MAX_BUCKET_SIZE = MAX_BUCKET_SIZE;
         this.MIN_BUCKET_SIZE = MIN_BUCKET_SIZE;
         this.TRAIN_DATA_COUNT = TRAIN_DATA_COUNT;
         this.TEST_DATA_COUNT = TEST_DATA_COUNT;
+        this.MAX_TRAIN_DATA_SIZE = max_train_data_size;
     }
 
     public void process() throws IOException {
@@ -55,7 +58,7 @@ public class WhatsAppChatParser {
                         String fileName = file.getName();
                         log.info("File: " + fileName);
                         LinkedList<Conversation> conversations = processChat(targetUser, file);
-                        log.info("size of conversation :" + conversations.size());
+                        log.info("size of conversation :{}", conversations.size());
                         allConversations.addAll(conversations);
                     }
                 }
@@ -63,7 +66,7 @@ public class WhatsAppChatParser {
                 log.info("No files found in the folder.");
             }
         } else {
-            log.info(folderPath + " is not a directory.");
+            log.info("{} is not a directory.", folderPath);
             return;
         }
 
@@ -75,12 +78,11 @@ public class WhatsAppChatParser {
         List<List<ChatMessage>> trainList = new LinkedList<>();
         Random random = new Random();
         int trainCounter = 0;
-        int i = 1;
         while (trainList.size() < TRAIN_DATA_COUNT) {
             Conversation randomConversation = allConversations.get(random.nextInt(totalConversation));
             log.debug("1");
             List<ChatMessage> randomBlockOfMessage = randomConversation.getRandomBlockOfMessage();
-            if (!randomBlockOfMessage.isEmpty()) {
+            if (!randomBlockOfMessage.isEmpty() && isMultiplePeopleChat(randomBlockOfMessage) && jsonify(randomBlockOfMessage).length() < MAX_TRAIN_DATA_SIZE) {
                 log.debug("2");
                 if (doesNotContainsSameSubset(trainList, randomBlockOfMessage)) {
                     trainList.add(randomBlockOfMessage);
@@ -96,7 +98,7 @@ public class WhatsAppChatParser {
         while (testList.size() < TEST_DATA_COUNT) {
             Conversation randomConversation = allConversations.get(random.nextInt(totalConversation));
             List<ChatMessage> randomBlockOfMessage = randomConversation.getRandomBlockOfMessage();
-            if (!randomBlockOfMessage.isEmpty()) {
+            if (!randomBlockOfMessage.isEmpty() && isMultiplePeopleChat(randomBlockOfMessage) && jsonify(randomBlockOfMessage).length() < MAX_TRAIN_DATA_SIZE) {
                 if (doesNotContainsSameSubset(testList, randomBlockOfMessage)) {
                     testList.add(randomBlockOfMessage);
                     if ((++testCounter) % 50 == 0) {
@@ -117,6 +119,14 @@ public class WhatsAppChatParser {
             }
         }
         return true;
+    }
+
+    private boolean isMultiplePeopleChat(List<ChatMessage> randomBlockOfMessage) {
+        Set<String> senderSet = new HashSet<>();
+        for (ChatMessage msg : randomBlockOfMessage) {
+            senderSet.add(msg.getSender());
+        }
+        return senderSet.size() > 1;
     }
 
     public boolean isSubset(List<ChatMessage> list1, List<ChatMessage> list2) {
@@ -255,18 +265,48 @@ public class WhatsAppChatParser {
     private void writeIntoJsonLineFile(List<List<ChatMessage>> conversationList, String fileName) throws IOException {
         if (createDestinationFolderIfNotExists()) {
             FileWriter writer = new FileWriter(getOutputFolderName() + fileName);
+            List<Integer> lengthDataList = new ArrayList<>();
+            long totalLength = 0;
             for (List<ChatMessage> conversation : conversationList) {
-                JSONObject data = new JSONObject();
-                ChatMessage lastResponse = conversation.get(conversation.size() - 1);
-                data.put("output", lastResponse.getSender() + ": " + lastResponse.getMessage());
-                data.put("input", stringify(conversation.stream().limit(conversation.size() - 1).toList())); // get all the messages serially skipping last one which becomes target's response
-                String personTalkingToTarget = conversation.stream().findFirst().orElse(Conversation.EMPTY_CHAT_MESSAGE).getSender();
-                data.put("instruction", String.format("Generate a possible response from %s to %s's last message in the given chat snippet, ensuring it aligns with the context of their conversation.", targetUser, personTalkingToTarget));
-                writer.write(data.toString());
+                String llmData = jsonify(conversation);
+                totalLength += llmData.length();
+                lengthDataList.add(llmData.length());
+                writer.write(llmData);
                 writer.append('\n');
             }
             writer.close();
+            // run some stats
+            log.info("stats for {} of length {}", fileName, conversationList.size());
+            log.info("average : {}", totalLength / conversationList.size());
+            Collections.sort(lengthDataList);
+            log.info("median : {}", getMedian(lengthDataList));
+            log.info("min length data : {}", lengthDataList.stream().findFirst().orElse(-1));
+            log.info("max length data : {}", lengthDataList.stream().skip(lengthDataList.size() - 1).findFirst().orElse(-1));
         } else log.info("not writing because output directory creation failed");
+    }
+
+    private String jsonify(List<ChatMessage> conversation) {
+        JSONObject data = new JSONObject();
+        ChatMessage lastResponse = conversation.get(conversation.size() - 1);
+        data.put("output", lastResponse.getSender() + ": " + lastResponse.getMessage());
+        data.put("input", stringify(conversation.stream().limit(conversation.size() - 1).toList())); // get all the messages serially skipping last one which becomes target's response
+        String personTalkingToTarget = conversation.stream().findFirst().orElse(Conversation.EMPTY_CHAT_MESSAGE).getSender();
+        data.put("instruction", String.format("Generate a possible response from %s to %s's last message in the given chat snippet, ensuring it aligns with the context of their conversation.", targetUser, personTalkingToTarget));
+        return data.toString();
+    }
+
+    private int getMedian(List<Integer> sortedList) {
+        int median;
+        int midIndex = sortedList.size() / 2;
+        if (sortedList.size() % 2 == 0) {
+            // Even-sized array
+            median = (sortedList.get(midIndex - 1) + sortedList.get(midIndex)) / 2;
+        } else {
+            // Odd-sized array
+            median = sortedList.get(midIndex);
+        }
+
+        return median;
     }
 
     private String getOutputFolderName() {
