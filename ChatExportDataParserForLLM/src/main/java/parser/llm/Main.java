@@ -26,6 +26,7 @@ public class Main {
         String testDataCountStr = prop.getProperty("test.data.count", "");
         String chatMinSizeStr = prop.getProperty("chat.min.size", "");
         String chatMaxSizeStr = prop.getProperty("chat.max.size", "");
+        String maxTrainDataSizeStr = prop.getProperty("train.max.size", "");
 
         if (targetUser.isEmpty()) {
             do {
@@ -37,9 +38,10 @@ public class Main {
         int testDataCount = getIntValue(testDataCountStr, 160, "enter test data count. enter newline to default to 160", "test data in config is invalid. enter test data. enter newline to default to 160");
         int chatMinSize = getIntValue(chatMinSizeStr, 3, "enter minimum block size to be selected. enter newline to default to 3", "enter minimum block size in config is invalid. enter minimum block size to be selected. enter newline to default to 3");
         int chatMaxSize = getIntValue(chatMaxSizeStr, 10, "enter maximum block size to be selected. enter newline to default to 10", "enter maximum block size in config is invalid. enter maximum block size to be selected. enter newline to default to 10");
+        int maxTrainDataSize = getIntValue(maxTrainDataSizeStr, 500, "enter maximum size of individual train data. enter newline to default to 500", "maximum size of individual train data in config is invalid. enter maximum size of individual train data. enter newline to default to 500");
         try {
             log.info(String.format("targetUser %s, trainDataCount %d, testDataCount %d, chatMinSize %d, chatMaxSize %d", targetUser, trainDataCount, testDataCount, chatMinSize, chatMaxSize));
-            new WhatsAppChatParser(targetUser, trainDataCount, testDataCount, chatMinSize, chatMaxSize, 500).process();
+            new WhatsAppChatParser(targetUser, trainDataCount, testDataCount, chatMinSize, chatMaxSize, maxTrainDataSize).process();
         } catch (IOException e) {
             log.error(e);
         }
