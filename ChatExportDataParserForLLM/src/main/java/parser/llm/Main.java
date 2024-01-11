@@ -39,7 +39,7 @@ public class Main {
         int chatMaxSize = getIntValue(chatMaxSizeStr, 10, "enter maximum block size to be selected. enter newline to default to 10", "enter maximum block size in config is invalid. enter maximum block size to be selected. enter newline to default to 10");
         try {
             log.info(String.format("targetUser %s, trainDataCount %d, testDataCount %d, chatMinSize %d, chatMaxSize %d", targetUser, trainDataCount, testDataCount, chatMinSize, chatMaxSize));
-            new WhatsAppChatParser(targetUser, trainDataCount, testDataCount, chatMinSize, chatMaxSize).process();
+            new WhatsAppChatParser(targetUser, trainDataCount, testDataCount, chatMinSize, chatMaxSize, 500).process();
         } catch (IOException e) {
             log.error(e);
         }
