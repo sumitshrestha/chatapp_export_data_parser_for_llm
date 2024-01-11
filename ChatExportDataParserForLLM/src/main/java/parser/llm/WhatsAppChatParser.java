@@ -25,12 +25,15 @@ public class WhatsAppChatParser {
 
     private final String targetUser;
     private String folderPath = "input";
+
+    private final Map<List<ChatMessage>, HashSet<ChatMessage>> map = new HashMap<>();
+
     private final String[] blacklistedMessages = {
-//            "Messages and calls are end-to-end encrypted. No one outside of this chat, not even WhatsApp, can read or listen to them.".toLowerCase(),
-//            "<Media omitted>".toLowerCase(),
-//            "image omitted".toLowerCase(),
-//            "video omitted".toLowerCase(),
-//            "You deleted this message.".toLowerCase()
+            "Messages and calls are end-to-end encrypted. No one outside of this chat, not even WhatsApp, can read or listen to them.".toLowerCase(),
+            "<Media omitted>".toLowerCase(),
+            "image omitted".toLowerCase(),
+            "video omitted".toLowerCase(),
+            "You deleted this message.".toLowerCase()
     };
 
     public WhatsAppChatParser(String targetUser, int TRAIN_DATA_COUNT, int TEST_DATA_COUNT, int MIN_BUCKET_SIZE, int MAX_BUCKET_SIZE) {
@@ -72,13 +75,18 @@ public class WhatsAppChatParser {
         List<List<ChatMessage>> trainList = new LinkedList<>();
         Random random = new Random();
         int trainCounter = 0;
+        int i = 1;
         while (trainList.size() < TRAIN_DATA_COUNT) {
             Conversation randomConversation = allConversations.get(random.nextInt(totalConversation));
+            log.debug("1");
             List<ChatMessage> randomBlockOfMessage = randomConversation.getRandomBlockOfMessage();
-            if (doesNotContainsSameSubset(trainList, randomBlockOfMessage)) {
-                trainList.add(randomBlockOfMessage);
-                if ((++trainCounter) % 50 == 0) {
-                    log.info("this is train data at " + trainCounter);
+            if (!randomBlockOfMessage.isEmpty()) {
+                log.debug("2");
+                if (doesNotContainsSameSubset(trainList, randomBlockOfMessage)) {
+                    trainList.add(randomBlockOfMessage);
+                    if ((++trainCounter) % 50 == 0) {
+                        log.info("this is train data at " + trainCounter);
+                    }
                 }
             }
         }
@@ -88,10 +96,12 @@ public class WhatsAppChatParser {
         while (testList.size() < TEST_DATA_COUNT) {
             Conversation randomConversation = allConversations.get(random.nextInt(totalConversation));
             List<ChatMessage> randomBlockOfMessage = randomConversation.getRandomBlockOfMessage();
-            if (doesNotContainsSameSubset(testList, randomBlockOfMessage)) {
-                testList.add(randomBlockOfMessage);
-                if ((++testCounter) % 50 == 0) {
-                    log.info("this is train data at " + testCounter);
+            if (!randomBlockOfMessage.isEmpty()) {
+                if (doesNotContainsSameSubset(testList, randomBlockOfMessage)) {
+                    testList.add(randomBlockOfMessage);
+                    if ((++testCounter) % 50 == 0) {
+                        log.info("this is train data at " + testCounter);
+                    }
                 }
             }
         }
@@ -108,8 +118,6 @@ public class WhatsAppChatParser {
         }
         return true;
     }
-
-    private Map<List<ChatMessage>, HashSet<ChatMessage>> map = new HashMap<>();
 
     public boolean isSubset(List<ChatMessage> list1, List<ChatMessage> list2) {
         HashSet<ChatMessage> m1 = getCachedMessage(list1);

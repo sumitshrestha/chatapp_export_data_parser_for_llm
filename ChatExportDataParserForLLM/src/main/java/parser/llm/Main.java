@@ -21,16 +21,16 @@ public class Main {
             log.error(e);
         }
 
-        String targetUser = prop.getProperty("target.user");
-        String trainDataCountStr = prop.getProperty("train.data.count");
-        String testDataCountStr = prop.getProperty("test.data.count");
-        String chatMinSizeStr = prop.getProperty("chat.min.size");
-        String chatMaxSizeStr = prop.getProperty("chat.max.size");
+        String targetUser = prop.getProperty("target.user", "");
+        String trainDataCountStr = prop.getProperty("train.data.count", "");
+        String testDataCountStr = prop.getProperty("test.data.count", "");
+        String chatMinSizeStr = prop.getProperty("chat.min.size", "");
+        String chatMaxSizeStr = prop.getProperty("chat.max.size", "");
 
         if (targetUser.isEmpty()) {
             do {
                 System.out.println("enter user to be simulated");
-                targetUser = System.console().readLine();
+                targetUser = readFromConsole();
             } while (targetUser.isEmpty());
         }
         int trainDataCount = getIntValue(trainDataCountStr, 1000, "enter train data count. enter newline to default to 1000", "train data in config is invalid. enter train data. enter newline to default to 1000");

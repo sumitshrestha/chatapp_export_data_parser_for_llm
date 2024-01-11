@@ -49,15 +49,18 @@ public class Conversation {
     }
 
     public List<ChatMessage> getRandomBlockOfMessage() {
-        if (this.messageList.size() < MIN_BUCKET_SIZE)
+        int messageLen = this.messageList.size();
+        if (messageLen < MIN_BUCKET_SIZE)
             return new ArrayList<>(); // Return an empty list
-
+        if (this.getSenderList().size() < 2)
+            return new ArrayList<>(); // Return an empty list
         LinkedList<Integer> indices = this.calculateTargetUserIndices();
         if (!indices.isEmpty() && indices.peekLast() < MIN_BUCKET_SIZE)
             return new ArrayList<>(); // Return an empty list
 
         int targetIndex = -1;
         int sublistSize = -1;
+        int i = 1;
         do {
             // Find a random occurrence of the target item
             targetIndex = findRandomOccurrenceOfTarget();
@@ -65,9 +68,14 @@ public class Conversation {
                 // Target item not found
                 return new ArrayList<>(); // Return an empty list
             }
-
+            if (targetIndex <= MIN_BUCKET_SIZE)
+                return new ArrayList<>(); // Return an empty list
             // Generate random sublist size between 2 and 10, ensuring it doesn't exceed available space
-            sublistSize = random.nextInt(MIN_BUCKET_SIZE, MAX_BUCKET_SIZE + 1);
+            int upperBound = MAX_BUCKET_SIZE + 1;
+            upperBound = Math.min(upperBound, targetIndex);
+            sublistSize = random.nextInt(MIN_BUCKET_SIZE, upperBound);
+            if ((i++) % 50 == 0)
+                log.info("stuck here at " + i);
         } while (hasRightBlockOfMessageNotFound(targetIndex, sublistSize));
 
         // Create the sublist starting from the target item's index and extending backwards
