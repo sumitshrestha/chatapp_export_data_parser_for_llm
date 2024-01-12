@@ -3,16 +3,19 @@ package parser.llm;
 import lombok.extern.log4j.Log4j2;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import parser.llm.source.DataParser;
+import parser.llm.source.TelegramDataParser;
+import parser.llm.source.WhatsappDataParser;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.time.Duration;
 import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Log4j2
-public class WhatsAppChatParser {
+public class ChatParser {
     private static final int CRITERIA_CONVERSATION_SEPARATOR = 10;
     private static final int CRITERIA_CONVERSATION_MERGE = 20;
     private final int MAX_BUCKET_SIZE;
@@ -21,24 +24,15 @@ public class WhatsAppChatParser {
     private final int MAX_TRAIN_DATA_SIZE;
     private final int TRAIN_DATA_COUNT;
     private final int TEST_DATA_COUNT;
-    private static final Pattern iphoneMessagePattern = Pattern.compile("\\[(?<month>\\d{1,2})/(?<day>\\d{1,2})/(?<year>\\d{1,2}), (?<hour>\\d{1,2}):(?<minute>\\d{1,2}):(?<second>\\d{1,2}) (?<daynight>[AP]M)\\] (?<personName>[\\w ]+): (?<message>.*)");
-    private static final Pattern androidMessagePattern = Pattern.compile("(?<month>\\d{2})/(?<day>\\d{2})/(?<year>\\d{2}), (?<hour>\\d{1,2}):(?<minute>\\d{1,2}) (?<daynight>[AP]M) - (?<personName>[\\w ]+): (?<message>.*)");
-    private static final char wierdCharacter = ' ';
+
+    private final Map<String, DataParser> dataParserMap = Map.of("whatsapp", new WhatsappDataParser(), "telegram", new TelegramDataParser());
 
     private final String targetUser;
     private String folderPath = "input";
 
     private final Map<List<ChatMessage>, HashSet<ChatMessage>> map = new HashMap<>();
 
-    private final String[] blacklistedMessages = {
-            "Messages and calls are end-to-end encrypted. No one outside of this chat, not even WhatsApp, can read or listen to them.".toLowerCase(),
-            "<Media omitted>".toLowerCase(),
-            "image omitted".toLowerCase(),
-            "video omitted".toLowerCase(),
-            "You deleted this message.".toLowerCase()
-    };
-
-    public WhatsAppChatParser(String targetUser, int TRAIN_DATA_COUNT, int TEST_DATA_COUNT, int MIN_BUCKET_SIZE, int MAX_BUCKET_SIZE, int max_train_data_size) {
+    public ChatParser(String targetUser, int TRAIN_DATA_COUNT, int TEST_DATA_COUNT, int MIN_BUCKET_SIZE, int MAX_BUCKET_SIZE, int max_train_data_size) {
         this.targetUser = targetUser;
         this.MAX_BUCKET_SIZE = MAX_BUCKET_SIZE;
         this.MIN_BUCKET_SIZE = MIN_BUCKET_SIZE;
@@ -51,25 +45,39 @@ public class WhatsAppChatParser {
         File folder = new File(folderPath);
         LinkedList<Conversation> allConversations = new LinkedList<>();
         if (folder.isDirectory()) {
-            File[] files = folder.listFiles();
-            if (files != null) {
-                for (File file : files) {
-                    if (file.isFile()) { // only read files. dont care for any subdirectories under
-                        String fileName = file.getName();
-                        log.info("File: " + fileName);
-                        LinkedList<Conversation> conversations = processChat(targetUser, file);
-                        log.info("size of conversation :{}", conversations.size());
-                        allConversations.addAll(conversations);
+            File[] directories = folder.listFiles();
+            if (directories != null) {
+                for (File directory : directories) {
+                    if (directory.isDirectory()) {
+                        String source = directory.getName();
+                        log.info("Reading files off : " + source);
+                        if (dataParserMap.containsKey(source)) {
+                            DataParser parser = dataParserMap.get(source);
+                            File[] files = directory.listFiles();
+                            if (files != null) {
+                                for (File file : files) {
+                                    if (file.isFile()) {
+                                        ArrayList<ChatMessage> chatMessages = parser.readFileIntoChatMessage(file);
+                                        LinkedList<Conversation> conversations = processChat(chatMessages);
+                                        log.info("size of conversation : {}", conversations.size());
+                                        allConversations.addAll(conversations);
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             } else {
                 log.info("No files found in the folder.");
             }
         } else {
-            log.info("{} is not a directory.", folderPath);
+            log.info("{} is not a directory", folderPath);
             return;
         }
-
+        if (allConversations.isEmpty()) {
+            log.error("no input file to process or input file is empty");
+            return;
+        }
         int totalConversation = allConversations.size();
         log.info(String.format("total for difference of %d hour: %d", CRITERIA_CONVERSATION_MERGE, totalConversation));
 
@@ -87,7 +95,7 @@ public class WhatsAppChatParser {
                 if (doesNotContainsSameSubset(trainList, randomBlockOfMessage)) {
                     trainList.add(randomBlockOfMessage);
                     if ((++trainCounter) % 50 == 0) {
-                        log.info("this is train data at " + trainCounter);
+                        log.info("this is train data at {}", trainCounter);
                     }
                 }
             }
@@ -102,7 +110,7 @@ public class WhatsAppChatParser {
                 if (doesNotContainsSameSubset(testList, randomBlockOfMessage)) {
                     testList.add(randomBlockOfMessage);
                     if ((++testCounter) % 50 == 0) {
-                        log.info("this is train data at " + testCounter);
+                        log.info("this is train data at {}", testCounter);
                     }
                 }
             }
@@ -146,60 +154,12 @@ public class WhatsAppChatParser {
         return set;
     }
 
-    private LinkedList<Conversation> processChat(String target, File file) throws IOException {
-        FileReader fileReader = new FileReader(file);
-        // Read the WhatsApp chat export file
-        BufferedReader bufferedReader = new BufferedReader(fileReader);
-
-        // Initialize a list to store the chat messages
-        ArrayList<ChatMessage> chatMessages = new ArrayList<>();
-
-        // Iterate over the chat messages
-        String line;
-        while ((line = bufferedReader.readLine()) != null) {
-            line = line.replace(wierdCharacter, ' ');
-            boolean isLineToBeSkipped = false;
-            for (String b : blacklistedMessages) {
-                if (line.toLowerCase().endsWith(b)) {
-                    isLineToBeSkipped = true;
-                    break;
-                }
-            }
-            if (isLineToBeSkipped) continue;
-
-            Matcher matcher = iphoneMessagePattern.matcher(line);
-            if (matcher.matches()) {
-                ChatMessage chatMessage = ChatMessage.ChatMessageBuilder.get()
-                        .sender(matcher.group("personName")).message(matcher.group("message"))
-                        .month(matcher.group("month")).day(matcher.group("day")).year(matcher.group("year"))
-                        .hour(matcher.group("hour")).minute(matcher.group("minute")).second(matcher.group("second")).isDay(matcher.group("daynight"))
-                        .build();
-                // Add the ChatMessage object to the list
-                chatMessages.add(chatMessage);
-            } else {
-                matcher = androidMessagePattern.matcher(line);
-                if (matcher.matches()) {
-                    ChatMessage chatMessage = ChatMessage.ChatMessageBuilder.get()
-                            .sender(matcher.group("personName")).message(matcher.group("message"))
-                            .month(matcher.group("month")).day(matcher.group("day")).year(matcher.group("year"))
-                            .hour(matcher.group("hour")).minute(matcher.group("minute")).isDay(matcher.group("daynight"))
-                            .build();
-                    // Add the ChatMessage object to the list
-                    chatMessages.add(chatMessage);
-                } else if (!chatMessages.isEmpty()) { // regular text that continues
-                    ChatMessage message = chatMessages.get(chatMessages.size() - 1);
-                    message.appendMessage(line);
-                }
-            }
-        }
-        // Close the file reader
-        bufferedReader.close();
-
+    private LinkedList<Conversation> processChat(ArrayList<ChatMessage> chatMessages) {
         LinkedList<Conversation> conversationList = new LinkedList<>();
         Conversation previousConversation = null;
         for (ChatMessage currentMessage : chatMessages) {
             if (previousConversation == null) {
-                previousConversation = new Conversation(MIN_BUCKET_SIZE, MAX_BUCKET_SIZE, target);
+                previousConversation = new Conversation(MIN_BUCKET_SIZE, MAX_BUCKET_SIZE, targetUser);
                 previousConversation.addChatMessage(currentMessage);
                 conversationList.add(previousConversation);
             } else {
@@ -213,7 +173,7 @@ public class WhatsAppChatParser {
                         previousConversation.addChatMessage(currentMessage);
                     } else { // separate from previous
 //                        System.out.printf("separating due to difference of %d hours", hours);
-                        previousConversation = new Conversation(MIN_BUCKET_SIZE, MAX_BUCKET_SIZE, target);
+                        previousConversation = new Conversation(MIN_BUCKET_SIZE, MAX_BUCKET_SIZE, targetUser);
                         previousConversation.addChatMessage(currentMessage);
                         conversationList.add(previousConversation);
                     }
@@ -291,7 +251,8 @@ public class WhatsAppChatParser {
         data.put("output", lastResponse.getSender() + ": " + lastResponse.getMessage());
         data.put("input", stringify(conversation.stream().limit(conversation.size() - 1).toList())); // get all the messages serially skipping last one which becomes target's response
         String personTalkingToTarget = conversation.stream().findFirst().orElse(Conversation.EMPTY_CHAT_MESSAGE).getSender();
-        data.put("instruction", String.format("Generate a possible response from %s to %s's last message in the given chat snippet, ensuring it aligns with the context of their conversation.", targetUser, personTalkingToTarget));
+        data.put("instruction", "Respond based on context in chat snippet input");
+//        data.put("instruction", String.format("Generate a possible response from %s to %s's last message in the given chat snippet, ensuring it aligns with the context of their conversation.", targetUser, personTalkingToTarget));
         return data.toString();
     }
 

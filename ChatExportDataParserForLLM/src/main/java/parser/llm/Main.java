@@ -40,8 +40,8 @@ public class Main {
         int chatMaxSize = getIntValue(chatMaxSizeStr, 10, "enter maximum block size to be selected. enter newline to default to 10", "enter maximum block size in config is invalid. enter maximum block size to be selected. enter newline to default to 10");
         int maxTrainDataSize = getIntValue(maxTrainDataSizeStr, 500, "enter maximum size of individual train data. enter newline to default to 500", "maximum size of individual train data in config is invalid. enter maximum size of individual train data. enter newline to default to 500");
         try {
-            log.info(String.format("targetUser %s, trainDataCount %d, testDataCount %d, chatMinSize %d, chatMaxSize %d", targetUser, trainDataCount, testDataCount, chatMinSize, chatMaxSize));
-            new WhatsAppChatParser(targetUser, trainDataCount, testDataCount, chatMinSize, chatMaxSize, maxTrainDataSize).process();
+            log.info("targetUser {}, trainDataCount {}, testDataCount {}, chatMinSize {}, chatMaxSize {}", targetUser, trainDataCount, testDataCount, chatMinSize, chatMaxSize);
+            new ChatParser(targetUser, trainDataCount, testDataCount, chatMinSize, chatMaxSize, maxTrainDataSize).process();
         } catch (IOException e) {
             log.error(e);
         }
