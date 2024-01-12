@@ -1,11 +1,13 @@
 package parser.llm;
 
+import lombok.extern.log4j.Log4j2;
 import org.json.JSONObject;
 
 import java.time.DateTimeException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
+@Log4j2
 public class ChatMessage {
 
     private String sender;
@@ -39,7 +41,7 @@ public class ChatMessage {
         return new JSONObject().put("sender", sender).put("message", message).put("time", timestamp.format(DateTimeFormatter.ofPattern("EEEE, MMMM d, yyyy")));
     }
 
-    static class ChatMessageBuilder {
+    public static class ChatMessageBuilder {
         private String sender;
         private String message;
         private int month;
@@ -49,6 +51,7 @@ public class ChatMessage {
         private int minute;
         private int second;
         private boolean isPM = false;
+        private LocalDateTime time;
 
         private ChatMessageBuilder() {
         }
@@ -106,6 +109,11 @@ public class ChatMessage {
             return this;
         }
 
+        public ChatMessageBuilder time(LocalDateTime time) {
+            this.time = time;
+            return this;
+        }
+
         public int convertTimeTo24HourFormat(int hour12, String amPm) {
             int hour24 = 0;
             if ("am".equalsIgnoreCase(amPm)) {
@@ -126,13 +134,15 @@ public class ChatMessage {
         }
 
         public ChatMessage build() {
-            LocalDateTime localDateTime;
-            try {
-                localDateTime = LocalDateTime.of(year, month, day, hour, minute, second);
-            } catch (DateTimeException e) {
-                localDateTime = null;
+            if (time == null) {
+                try {
+                    time = LocalDateTime.of(year, month, day, hour, minute, second);
+                } catch (DateTimeException e) {
+                    log.error(e);
+                }
             }
-            return new ChatMessage(this.sender, this.message, localDateTime);
+            
+            return new ChatMessage(this.sender, this.message, time);
         }
     }
 }
