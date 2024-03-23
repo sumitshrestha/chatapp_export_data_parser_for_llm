@@ -1,6 +1,6 @@
-package parser.llm.source;
+package com.parser.llm.source;
 
-import parser.llm.ChatMessage;
+import com.parser.llm.chat.export.process.ChatMessage;
 
 import java.io.BufferedReader;
 import java.io.File;

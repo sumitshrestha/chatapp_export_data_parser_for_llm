@@ -1,10 +1,12 @@
-package parser.llm;
+package com.parser.llm.chat.export.process;
 
 import lombok.extern.log4j.Log4j2;
 import org.json.JSONObject;
 
 import java.time.DateTimeException;
+import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.Period;
 import java.time.format.DateTimeFormatter;
 
 @Log4j2
@@ -35,6 +37,43 @@ public class ChatMessage {
     public String appendMessage(String text) {
         this.message += "\n" + text;
         return this.message;
+    }
+
+    public void mergeMessage(ChatMessage message) {
+//        this.message += '\n' + message.getMessage();
+        this.message += ". " + message.getMessage();
+        Period period = getPeriod(this.timestamp, message.timestamp);
+
+        // Calculate the time (hours, minutes, seconds) between the two dates
+        long[] time = getTime(this.timestamp, message.timestamp);
+
+        // Calculate the average period and time
+        int totalSeconds = (int) (time[0] * 3600 + time[1] * 60 + time[2]);
+        int averageSeconds = totalSeconds / 2;
+
+        Period averagePeriod = period.plusDays(averageSeconds / (24 * 3600));
+        Duration averageDuration = Duration.ofSeconds(averageSeconds % (24 * 3600));
+
+        // Calculate the average LocalDateTime
+        this.timestamp = this.timestamp.plus(averagePeriod).plus(averageDuration);
+    }
+
+    private static Period getPeriod(LocalDateTime dateTime1, LocalDateTime dateTime2) {
+        return Period.between(dateTime1.toLocalDate(), dateTime2.toLocalDate());
+    }
+
+    private static long[] getTime(LocalDateTime dateTime1, LocalDateTime dateTime2) {
+        LocalDateTime today = LocalDateTime.of(
+                dateTime2.getYear(), dateTime2.getMonthValue(), dateTime2.getDayOfMonth(),
+                dateTime1.getHour(), dateTime1.getMinute(), dateTime1.getSecond());
+
+        Duration duration = Duration.between(today, dateTime2);
+        long seconds = duration.getSeconds();
+        long hours = seconds / 3600;
+        long minutes = (seconds % 3600) / 60;
+        long secs = seconds % 60;
+
+        return new long[]{hours, minutes, secs};
     }
 
     public JSONObject getJson() {
@@ -141,7 +180,7 @@ public class ChatMessage {
                     log.error(e);
                 }
             }
-            
+
             return new ChatMessage(this.sender, this.message, time);
         }
     }

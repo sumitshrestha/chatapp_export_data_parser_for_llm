@@ -35,6 +35,12 @@
             <version>1.18.30</version>
             <scope>provided</scope>
         </dependency>
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.10.1</version>
+        </dependency>
+
     </dependencies>
 
     <build>
@@ -48,7 +54,7 @@
                     </descriptorRefs>
                     <archive>
                         <manifest>
-                            <mainClass>parser.llm.Main</mainClass>
+                            <mainClass>com.parser.llm.Main</mainClass>
                         </manifest>
                     </archive>
                 </configuration>

@@ -1,9 +1,9 @@
-package parser.llm.source;
+package com.parser.llm.source;
 
+import com.parser.llm.chat.export.process.ChatMessage;
 import lombok.extern.log4j.Log4j2;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import parser.llm.ChatMessage;
 
 import java.io.File;
 import java.io.IOException;

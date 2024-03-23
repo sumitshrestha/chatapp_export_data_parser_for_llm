@@ -1,11 +1,11 @@
-package parser.llm;
+package com.parser.llm.chat.export.process;
 
 import lombok.extern.log4j.Log4j2;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import parser.llm.source.DataParser;
-import parser.llm.source.TelegramDataParser;
-import parser.llm.source.WhatsappDataParser;
+import com.parser.llm.source.DataParser;
+import com.parser.llm.source.TelegramDataParser;
+import com.parser.llm.source.WhatsappDataParser;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -18,6 +18,7 @@ import java.util.stream.Collectors;
 public class ChatParser {
     private static final int CRITERIA_CONVERSATION_SEPARATOR = 10;
     private static final int CRITERIA_CONVERSATION_MERGE = 20;
+    public static final int MAX_LIMIT_MESSAGE_MERGE = 10;
     private final int MAX_BUCKET_SIZE;
     private final int MIN_BUCKET_SIZE;
 
@@ -155,6 +156,39 @@ public class ChatParser {
     }
 
     private LinkedList<Conversation> processChat(ArrayList<ChatMessage> chatMessages) {
+        ChatMessage previousMessage = null;
+        boolean skipUpdate = false;
+        ListIterator<ChatMessage> itr = chatMessages.listIterator();
+        while (itr.hasNext()) {
+            ChatMessage currentMessage = itr.next();
+            if (previousMessage != null) {
+                Duration duration = Duration.between(previousMessage.getTimestamp(), currentMessage.getTimestamp());
+                if (duration.toMinutes() < MAX_LIMIT_MESSAGE_MERGE && targetUser.equals(previousMessage.getSender()) && targetUser.equals(currentMessage.getSender())) {
+                    previousMessage.mergeMessage(currentMessage);
+                    itr.remove();
+                    skipUpdate = true;
+                }
+            }
+            if (!skipUpdate) {
+                previousMessage = currentMessage;
+            } else skipUpdate = false;
+        }
+
+//        for (ChatMessage currentMessage : chatMessages) {
+//            if (previousMessage != null) {
+//                Duration duration = Duration.between(previousMessage.getTimestamp(), currentMessage.getTimestamp());
+//                if (duration.toMinutes() < 10 && targetUser.equals(previousMessage.getSender()) && targetUser.equals(currentMessage.getSender())) {
+//                    previousMessage.mergeMessage(currentMessage);
+//                    if (chatMessages.remove(currentMessage))
+//                        log.info("removing message");
+//                    skipUpdate = true;
+//                }
+//            }
+//            if (!skipUpdate) {
+//                previousMessage = currentMessage;
+//            } else skipUpdate = false;
+//        }
+
         LinkedList<Conversation> conversationList = new LinkedList<>();
         Conversation previousConversation = null;
         for (ChatMessage currentMessage : chatMessages) {
@@ -251,8 +285,8 @@ public class ChatParser {
         data.put("output", lastResponse.getSender() + ": " + lastResponse.getMessage());
         data.put("input", stringify(conversation.stream().limit(conversation.size() - 1).toList())); // get all the messages serially skipping last one which becomes target's response
         String personTalkingToTarget = conversation.stream().findFirst().orElse(Conversation.EMPTY_CHAT_MESSAGE).getSender();
-        data.put("instruction", "Respond based on context in chat snippet input");
-//        data.put("instruction", String.format("Generate a possible response from %s to %s's last message in the given chat snippet, ensuring it aligns with the context of their conversation.", targetUser, personTalkingToTarget));
+//        data.put("instruction", "Respond based on context in chat snippet input");
+        data.put("instruction", String.format("Generate a possible response from %s to %s's last message in the given chat snippet, ensuring it aligns with the context of their conversation.", targetUser, personTalkingToTarget));
         return data.toString();
     }
 
