@@ -1,5 +1,6 @@
-package parser.llm;
+package com.parser.llm;
 
+import com.parser.llm.chat.export.process.ChatParser;
 import lombok.extern.log4j.Log4j2;
 
 import java.io.FileInputStream;

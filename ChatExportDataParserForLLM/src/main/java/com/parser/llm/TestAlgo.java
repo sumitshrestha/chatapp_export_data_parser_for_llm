@@ -1,4 +1,7 @@
-package parser.llm;
+package com.parser.llm;
+
+import com.parser.llm.chat.export.process.ChatMessage;
+import com.parser.llm.chat.export.process.Conversation;
 
 import java.util.HashMap;
 import java.util.List;

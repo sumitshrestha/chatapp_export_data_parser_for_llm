@@ -1,4 +1,4 @@
-package parser.llm;
+package com.parser.llm.chat.export.process;
 
 import lombok.extern.log4j.Log4j2;
 import org.json.JSONArray;
@@ -74,8 +74,12 @@ public class Conversation {
             int upperBound = MAX_BUCKET_SIZE + 1;
             upperBound = Math.min(upperBound, targetIndex);
             sublistSize = random.nextInt(MIN_BUCKET_SIZE, upperBound);
-            if ((i++) % 50 == 0)
-                log.info("stuck here at " + i);
+            i++;
+            // have a limit to how many times does the loop runs to find a right size bucket
+            if (i > 999) {
+                log.info("ending looking for bucket at index {}", targetIndex);
+                return new ArrayList<>(); // Return an empty list
+            }
         } while (hasRightBlockOfMessageNotFound(targetIndex, sublistSize));
 
         // Create the sublist starting from the target item's index and extending backwards
@@ -117,7 +121,22 @@ public class Conversation {
             }
         }
 
+        removeConsecutiveIndices();
+        log.info("here is indices {}", targetUserIndices);
         this.countAtTargetIndexCalculation = messageSize;
         return this.targetUserIndices;
+    }
+
+    public void removeConsecutiveIndices() {
+        int i = 0;
+        while (i < targetUserIndices.size() - 1) {
+            if (targetUserIndices.get(i) + 1 == targetUserIndices.get(i + 1)) {
+                // Remove the smaller integer (consecutive)
+                targetUserIndices.remove(i);
+            } else {
+                // Move to the next element
+                i++;
+            }
+        }
     }
 }
